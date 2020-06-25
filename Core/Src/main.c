@@ -81,14 +81,23 @@ static void MX_USART3_UART_Init(void);
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-	if (htim -> Instance == TIM2) managerState () ;			// С частотой 8 кГц обрабатываем состояния контроллера
-	if (htim -> Instance == TIM6) {							// Если сработал этот таймер, то значит передача звука со второго контроллера прекращена
-		stState = stateWait ;
-		stVoiceDecodeBufPos = 0 ;
-		stVoiceDecodeBufNum = 0 ;
-	}
-	if (htim -> Instance == TIM3)
-		managerTransfer () ;		// По срабатыванию этого таймера выполняется сжатие и передача буфера
+    if(htim->Instance == TIM2) {
+    	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1);
+    	stVoiceEncodeBuf [0][stVoiceEncodeBufPos] = stVoiceEncodeBufPos + 1;
+    	++stVoiceEncodeBufPos ;
+    }
+    if(htim->Instance == TIM3) {
+    	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2);
+    	stVoiceEncodeBufPos = 0 ;
+    }
+//	if (htim -> Instance == TIM2) managerState () ;			// С частотой 8 кГц обрабатываем состояния контроллера
+//	if (htim -> Instance == TIM6) {							// Если сработал этот таймер, то значит передача звука со второго контроллера прекращена
+//		stState = stateWait ;
+//		stVoiceDecodeBufPos = 0 ;
+//		stVoiceDecodeBufNum = 0 ;
+//	}
+//	if (htim -> Instance == TIM3)
+//		managerTransfer () ;		// По срабатыванию этого таймера выполняется сжатие и передача буфера
 }
 //-------------------------------------------------------------------------------------------
 /*!
@@ -268,8 +277,8 @@ int main(void)
   speex_bits_init(&stSpeexEncodeStream);			// Инициализация для работы кодека speex
   speex_bits_init(&stSpeexDecodeStream);
 
-  HAL_TIM_Base_Start_IT(&htim2);
-
+  HAL_TIM_Base_Start_IT(&htim2) ;
+  HAL_TIM_Base_Start_IT(&htim3) ;
 
   HAL_ADCEx_Calibration_Start(&hadc1);
   startUART_DMA ;
