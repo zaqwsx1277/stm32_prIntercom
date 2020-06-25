@@ -82,9 +82,13 @@ static void MX_USART3_UART_Init(void);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if (htim -> Instance == TIM2) managerState () ;			// С частотой 8 кГц обрабатываем состояния контроллера
-	if (htim -> Instance == TIM6)
-		stState = stateWait ;		// Если сработал этот таймер, то значит передача звука со второго контроллера прекращена
-	if (htim -> Instance == TIM3) managerTransfer () ;		// По срабатыванию этого таймера выполняется сжатие и передача буфера
+	if (htim -> Instance == TIM6) {							// Если сработал этот таймер, то значит передача звука со второго контроллера прекращена
+		stState = stateWait ;
+		stVoiceDecodeBufPos = 0 ;
+		stVoiceDecodeBufNum = 0 ;
+	}
+	if (htim -> Instance == TIM3)
+		managerTransfer () ;		// По срабатыванию этого таймера выполняется сжатие и передача буфера
 }
 //-------------------------------------------------------------------------------------------
 /*!
@@ -95,8 +99,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	switch (stState) {
 	  case stateWait :		// Реакция на кнопки возможна только в режиме ожидания и передачи голоса
 	  case stateReady :
-		if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) stState = stateReady ;
-		  else stState = stateWait ;
+		if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {
+			stState = stateReady ;
+			stVoiceEncodeBufPos = 0 ;
+			stVoiceEncodeBufNum = 0 ;
+			HAL_TIM_Base_Start_IT(&htim3);					// запуск таймера контроля заполнения буфера
+		}
+		  else {
+			stState = stateWait ;
+			HAL_TIM_Base_Stop_IT(&htim3) ;
+		  }
 	  break ;
 
 	  default :
@@ -109,9 +121,18 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
  */
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
+	switch (stState) {
+	  case stateADC :
+//		if (++stVoiceEncodeBufPos == defVoiceInputBufSize) {			// Если сработало прерывание, то значит нужно сменить позицию в буфере
+//		  stVoiceEncodeBufPos = 0 ;
+//		  if (++stVoiceEncodeBufNum == defNumBuf) stVoiceEncodeBufNum = 0 ;
+//	    }
+		stState = stateReady ;
+	  break ;
 
-//	if (++stVoiceEncodeBufPos == defVoiceInputBufSize)
-//		stVoiceEncodeBufPos = 0 ;
+	  default :
+	  break ;
+	}
 }
 //-------------------------------------------------------------------------------------------
 /*!
@@ -163,15 +184,19 @@ void managerState  ()
 
 	  case stateReady : {
 		HAL_GPIO_WritePin (GPIOA, defColorLight1, GPIO_PIN_SET) ;
-        HAL_ADC_Start(&hadc1); 											// Получаем данные с микрофона через DMA
-        HAL_ADC_PollForConversion(&hadc1, 100);
-        stVoiceIn = HAL_ADC_GetValue(&hadc1);
-        HAL_ADC_Stop(&hadc1);
+//		stState = stateADC ;
+//        HAL_ADC_Start_DMA (&hadc1, (uint32_t*) &stVoiceEncodeBuf [stVoiceEncodeBufNum][stVoiceEncodeBufPos], 1); 											// Получаем данные с микрофона через DMA
+        stVoiceEncodeBuf [stVoiceEncodeBufNum][stVoiceEncodeBufPos] = stVoiceEncodeBufPos ;
+        if (++stVoiceEncodeBufPos == defVoiceInputBufSize) {
+        	stVoiceEncodeBufPos = 0 ;
+        	if (++stVoiceEncodeBufNum == defNumBuf) stVoiceEncodeBufNum = 0 ;
+        }
+ //       		HAL_ADC_Start_DMA (&hadc1, (uint32_t *) &stVoiceIn, 1);
 
-		uint16_t voiceIn = stVoiceIn ;
-        HAL_GPIO_WritePin (GPIOC, GPIO_PIN_12, GPIO_PIN_SET) ;			// Передаем данные на второй контроллер
-		HAL_UART_Transmit(&huart3, (uint8_t *) &voiceIn, 2, 100) ;
-		HAL_GPIO_WritePin (GPIOC, GPIO_PIN_12, GPIO_PIN_RESET) ;
+//		uint16_t voiceIn = stVoiceIn ;
+//        HAL_GPIO_WritePin (GPIOC, GPIO_PIN_12, GPIO_PIN_SET) ;			// Передаем данные на второй контроллер
+//		HAL_UART_Transmit(&huart3, (uint8_t *) &voiceIn, 2, 100) ;
+//		HAL_GPIO_WritePin (GPIOC, GPIO_PIN_12, GPIO_PIN_RESET) ;
 	  }
 	  break ;
 
@@ -198,7 +223,7 @@ void managerState  ()
  */
 void managerTransfer ()
 {
-
+HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2) ;
 }
 //----------------------------------------------------------------------------------
 /* USER CODE END 0 */
@@ -240,8 +265,11 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  speex_bits_init(&stSpeexEncodeStream);			// Инициализация для работы кодека speex
+  speex_bits_init(&stSpeexDecodeStream);
+
   HAL_TIM_Base_Start_IT(&htim2);
-  HAL_TIM_Base_Start_IT(&htim3);
+
 
   HAL_ADCEx_Calibration_Start(&hadc1);
   startUART_DMA ;
@@ -336,7 +364,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_8;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_28CYCLES_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -569,7 +597,7 @@ static void MX_DMA_Init(void)
   HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
   /* DMA2_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Channel3_IRQn, 7, 0);
+  HAL_NVIC_SetPriority(DMA2_Channel3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Channel3_IRQn);
 
 }
