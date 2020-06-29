@@ -82,7 +82,8 @@ static void MX_USART3_UART_Init(void);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if (htim -> Instance == TIM2) managerState () ;			// С частотой 8 кГц обрабатываем состояния контроллера
-	if (htim -> Instance == TIM3) managerTransfer () ;		// По срабатыванию этого таймера выполняется сжатие и передача буфера
+	if (htim -> Instance == TIM3)
+		managerTransfer () ;		// По срабатыванию этого таймера выполняется сжатие и передача буфера
 	if (htim -> Instance == TIM6) {							// Если сработал этот таймер, то значит передача звука со второго контроллера прекращена
 		stState = stateWait ;
 		stVoiceDecodeBufPos = 0 ;
@@ -95,8 +96,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
+	EXTI -> PR = EXTI_PR_PR0 ;		// Сбрасываем прерывание
+
 	switch (stState) {
-	  case stateWait :		// Реакция на кнопки возможна только в режиме ожидания и передачи голоса
+	  case stateWait :				// Реакция на кнопки возможна только в режиме ожидания и передачи голоса
 	  case stateReady :
 	  case stateADC :
 	  case stateFirstTim3 :
@@ -191,7 +194,6 @@ void managerState  ()
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET) ;
 		stState = stateADC ;											// Получаем данные с микрофона через DMA
         HAL_ADC_Start_DMA (&hadc1, (uint32_t*) &stVoiceEncodeBuf [stVoiceEncodeBufNum][stVoiceEncodeBufPos], 1);
-stTemp++ ;
 	  }
 	  break ;
 
@@ -228,7 +230,7 @@ void managerTransfer ()
 		speex_encode_int(stSpeexEncodeHandle, (spx_int16_t*)stVoiceEncodeBuf [stVoiceEncodeBufTransfer], &stSpeexEncodeStream);
 		speex_bits_write(&stSpeexEncodeStream, (char *) stSpeexEncodeBuf, defVoiceEncodeBufSize);
 
-		HAL_UART_Transmit(&huart3, (uint8_t *)stSpeexEncodeBuf, defVoiceEncodeBufSize, defTimeoutTransmit) ;	// Сжатые данные передаём на второй контроллер
+//		HAL_UART_Transmit(&huart3, (uint8_t *)stSpeexEncodeBuf, defVoiceEncodeBufSize, defTimeoutTransmit) ;	// Сжатые данные передаём на второй контроллер
 	  break ;
 	}
 }
@@ -241,9 +243,9 @@ void *speexInit (SpeexBits *inSpeexStream)
 	void *retVal = 0 ;
 	speex_bits_init(inSpeexStream);
 	retVal = speex_encoder_init(&speex_nb_mode);		// Инициализация кодека для работы с 8 кГц
-//	speex_encoder_ctl(retVal, SPEEX_SET_VBR, &stSpeexVBR);
-//	speex_encoder_ctl(retVal, SPEEX_SET_QUALITY,&stSpeexQuality);
-//	speex_encoder_ctl(retVal, SPEEX_SET_COMPLEXITY, &stSpeexComplexity);
+	speex_encoder_ctl(retVal, SPEEX_SET_VBR, &stSpeexVBR);
+	speex_encoder_ctl(retVal, SPEEX_SET_QUALITY,&stSpeexQuality);
+	speex_encoder_ctl(retVal, SPEEX_SET_COMPLEXITY, &stSpeexComplexity);
 	return retVal ;
 }
 //----------------------------------------------------------------------------------
@@ -287,7 +289,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   stSpeexEncodeHandle = speexInit (&stSpeexEncodeStream)	; // Инициализация для работы кодека speex на передачу и приём
-  stSpeexDecodeHandle = speexInit (&stSpeexDecodeStream)	;
+//  stSpeexDecodeHandle = speexInit (&stSpeexDecodeStream)	;
 
   HAL_TIM_Base_Start_IT(&htim2) ;						// Запускаем основной таймер на 8 кГц
 
