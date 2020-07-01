@@ -241,6 +241,7 @@ void lsp_unquant_nb(spx_lsp_t *lsp, int order, SpeexBits *bits)
 /********************************************************************************************/
 /* This function has been modified by STMicroelectronics, MCD Application team, June 2008.  */
 /********************************************************************************************/
+#if 0
 void lsp_quant_lbr(spx_lsp_t *lsp, spx_lsp_t *qlsp, int order, SpeexBits *bits)
 {
      int i;
@@ -373,6 +374,47 @@ void lsp_quant_lbr(spx_lsp_t *lsp, spx_lsp_t *qlsp, int order, SpeexBits *bits)
      for (i=0;i<0xa;i++)
        qlsp[i]=lsp[i]-PSHR16(qlsp[i],1);
 
+}
+#endif
+void lsp_quant_lbr(spx_lsp_t *lsp, spx_lsp_t *qlsp, int order, SpeexBits *bits)
+{
+   int i;
+   int id;
+   spx_word16_t quant_weight[10];
+
+   for (i=0;i<order;i++)
+      qlsp[i]=lsp[i];
+
+   compute_quant_weights(qlsp, quant_weight, order);
+
+   for (i=0;i<order;i++)
+      qlsp[i]=SUB16(qlsp[i],LSP_LINEAR(i));
+#ifndef FIXED_POINT
+   for (i=0;i<order;i++)
+      qlsp[i]=qlsp[i]*LSP_SCALE;
+#endif
+   id = lsp_quant(qlsp, cdbk_nb, NB_CDBK_SIZE, order);
+   speex_bits_pack(bits, id, 6);
+
+   for (i=0;i<order;i++)
+      qlsp[i]*=2;
+
+   id = lsp_weight_quant(qlsp, quant_weight, cdbk_nb_low1, NB_CDBK_SIZE_LOW1, 5);
+   speex_bits_pack(bits, id, 6);
+
+   id = lsp_weight_quant(qlsp+5, quant_weight+5, cdbk_nb_high1, NB_CDBK_SIZE_HIGH1, 5);
+   speex_bits_pack(bits, id, 6);
+
+#ifdef FIXED_POINT
+   for (i=0;i<order;i++)
+      qlsp[i] = PSHR16(qlsp[i],1);
+#else
+   for (i=0;i<order;i++)
+      qlsp[i] = qlsp[i]*0.0019531;
+#endif
+
+   for (i=0;i<order;i++)
+      qlsp[i]=lsp[i]-qlsp[i];
 }
 
 void lsp_unquant_lbr(spx_lsp_t *lsp, int order, SpeexBits *bits)

@@ -21,8 +21,13 @@
 #define defNumBuf 2 				///< Кол-во обрабатываемых буферов (почему из может быть больше дыух не знаю)
 #define defStartPeriod 8000			///< Длительность начального периода для вычисления среднего значения уровня входного сигнала.
 
+#ifdef DEBUG
 #define defColorLight1 GPIO_PIN_1	// Настройка на цвета светодиодов. Нужны для того, что бы у контроллеров отличались основные цвета светодиодов
 #define defColorLight2 GPIO_PIN_2
+#else
+#define defColorLight1 GPIO_PIN_2	// Настройка на цвета светодиодов. Нужны для того, что бы у контроллеров отличались основные цвета светодиодов
+#define defColorLight2 GPIO_PIN_1
+#endif
 
 #define startUART_DMA HAL_UART_Receive_DMA(&huart3, (uint8_t *) &stVoiceOut, 2) ///< Макрос для инициализации приёма данных по DMA
 
@@ -39,8 +44,9 @@
 				  stateTrRead,
 				  stateTrSend,
 				  stateVoicePlay, 		// Воспроизведения звука
-				  stateVoiceReceive,	// Получены 2 байта звука
+				  stateVoiceReceive,	// Получен получен звук от второго контроллера
 				  stateADC,				// Выполняется оцифровка голоса через DMA
+				  stateSpeexCompress, 	// Выполняется сжатие буфера кодеком speex. Данное состояние нужно, что бы не потерять весь буфер данных целиком
 				  stateError} ;
 
 //	struct defProtocol {
@@ -68,9 +74,9 @@
 	static void *stSpeexEncodeHandle, *stSpeexDecodeHandle ;			///< Указатель на структуру описывающую состояние кодека
 	static SpeexBits stSpeexEncodeStream, stSpeexDecodeStream ;			///< Структура для работы с кодеком speex
 ////	static SpeexEchoState *stSpeexEcho ;								///< Структура для работы с подавлением эха
-	volatile static int32_t stSpeexQuality = 4 ;						///< Качество. От него зависит используемый битрейт. 0 - загрузка минимальная, 10 максимальная.
-	volatile static int32_t stSpeexComplexity = 2 ;						///< Установка загрузки процессора
-	volatile static int32_t stSpeexVBR = 1 ;							///< Флаг установки переменного битрейта 0- выключен
+	volatile static int32_t stSpeexQuality = 3 ;						///< Качество. От него зависит используемый битрейт. 0 - загрузка минимальная, 10 максимальная.
+	volatile static int32_t stSpeexComplexity = 0 ;						///< Установка загрузки процессора
+	volatile static int32_t stSpeexVBR = 0 ;							///< Флаг установки переменного битрейта 0- выключен
 //	volatile static int32_t stSpeexEnh = 1 ;							///< Флаг регулировки усиления
 
 //	static uint32_t stTestClock = {0} ;
@@ -80,10 +86,13 @@
 
 //	volatile static uint32_t stPeriodVoiceReceive = 0 ;					///< Счётчик ожидания окончания передачи голоса
 
+	void setState (trState) ;											///< В зависимости от состояния управляем светодиодами
 	void managerState () ;												///< Менеджер обработки состояний
 	void managerTransfer () ;											///< Менеджер сжатия кодеком и передачи данных
 	void *speexInit (SpeexBits*) ;										///< Инициализация кодека speex
 
 	static uint32_t stTemp = 0 ;
+	static uint32_t stTemp2 = 0 ;
+	static uint32_t stTemp3 = 0 ;
 
 #endif /* INC_TCOMDEF_HPP_ */

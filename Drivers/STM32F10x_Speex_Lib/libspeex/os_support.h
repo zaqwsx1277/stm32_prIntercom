@@ -110,8 +110,8 @@ static inline void speex_free_scratch (void *ptr)
 #ifndef OVERRIDE_SPEEX_FATAL
 static inline void _speex_fatal(const char *str, const char *file, int line)
 {
-   fprintf (stderr, "Fatal (internal) error in %s, line %d: %s\n", file, line, str);
-   exit(1);
+//??   fprintf (stderr, "Fatal (internal) error in %s, line %d: %s\n", file, line, str);
+//??   exit(1);
 }
 #endif
 
@@ -119,7 +119,7 @@ static inline void _speex_fatal(const char *str, const char *file, int line)
 static inline void speex_warning(const char *str)
 {
 #ifndef DISABLE_WARNINGS
-   fprintf (stderr, "warning: %s\n", str);
+//??   fprintf (stderr, "warning: %s\n", str);
 #endif
 }
 #endif
@@ -128,7 +128,7 @@ static inline void speex_warning(const char *str)
 static inline void speex_warning_int(const char *str, int val)
 {
 #ifndef DISABLE_WARNINGS
-   fprintf (stderr, "warning: %s %d\n", str, val);
+//??   fprintf (stderr, "warning: %s %d\n", str, val);
 #endif
 }
 #endif
@@ -137,7 +137,7 @@ static inline void speex_warning_int(const char *str, int val)
 static inline void speex_notify(const char *str)
 {
 #ifndef DISABLE_NOTIFICATIONS
-   fprintf (stderr, "notification: %s\n", str);
+//??   fprintf (stderr, "notification: %s\n", str);
 #endif
 }
 #endif
@@ -146,8 +146,8 @@ static inline void speex_notify(const char *str)
 /** Speex wrapper for putc */
 static inline void _speex_putc(int ch, void *file)
 {
-   FILE *f = (FILE *)file;
-   fprintf(f, "%c", ch);
+//??   FILE *f = (FILE *)file;
+//??   fprintf(f, "%c", ch);
 }
 #endif
 
@@ -157,11 +157,11 @@ static inline void _speex_putc(int ch, void *file)
 #ifndef RELEASE
 static inline void print_vec(float *vec, int len, char *name)
 {
-   int i;
-   printf ("%s ", name);
-   for (i=0;i<len;i++)
-      printf (" %f", vec[i]);
-   printf ("\n");
+//   int i;
+//   printf ("%s ", name);
+//   for (i=0;i<len;i++)
+//      printf (" %f", vec[i]);
+//   printf ("\n");
 }
 #endif
 

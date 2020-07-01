@@ -39,8 +39,7 @@
  *  This is the Speex codec itself.
  *  @{
  */
-
-
+#define EXPORT
 
 #include "speex/speex_bits.h"
 #include "speex/speex_types.h"

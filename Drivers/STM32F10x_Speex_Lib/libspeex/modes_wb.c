@@ -47,6 +47,7 @@
 #include <math.h>
 #include "os_support.h"
 
+#define EXPORT
 
 #ifndef NULL
 #define NULL 0

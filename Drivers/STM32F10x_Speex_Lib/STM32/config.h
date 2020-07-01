@@ -37,7 +37,7 @@
 #define inline __inline
 #endif
 
-
+#include "main.h"
 
 #define EXPORT 
 
@@ -63,6 +63,7 @@
 #define SPEEX_SCRATCH_STACK_SIZE SPEEXENC_SCRATCH_STACK_SIZE
 #define NB_ENC_STACK SPEEXENC_SCRATCH_STACK_SIZE
 #define NB_DEC_STACK SPEEXDEC_SCRATCH_STACK_SIZE
+#define USE_ALLOCA
 
 extern void _speex_fatal(const char *str, const char *file, int line);
 extern void _speex_putc(int ch, void *file);

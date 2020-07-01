@@ -59,7 +59,9 @@
 
 /* Extern declarations for all codebooks we use here */
 extern const signed char gain_cdbk_lbr[];
+extern const signed char gain_cdbk_nb[];
 extern const signed char exc_10_32_table[];
+extern const signed char exc_5_64_table[];
 
 
 /* Parameters for Long-Term Prediction (LTP)*/
@@ -69,6 +71,12 @@ static const ltp_params ltp_params_lbr = {
    7
 };
 
+/* Parameters for Long-Term Prediction (LTP)*/
+static const ltp_params ltp_params_nb = {
+   gain_cdbk_nb,
+   7,
+   7
+};
 
 /* Split-VQ innovation parameters for low bit-rate narrowband */
 static const split_cb_params split_cb_nb_lbr = {
@@ -76,6 +84,15 @@ static const split_cb_params split_cb_nb_lbr = {
    4,               /*nb_subvect*/
    exc_10_32_table, /*shape_cb*/
    5,               /*shape_bits*/
+   0,
+};
+
+/* Split-VQ innovation parameters narrowband */
+static const split_cb_params split_cb_nb = {
+   5,               /*subvect_size*/
+   8,               /*nb_subvect*/
+   exc_5_64_table, /*shape_cb*/
+   6,               /*shape_bits*/
    0,
 };
 
@@ -101,6 +118,27 @@ static const SpeexSubmode nb_submode3 = {
 };
 
 
+/* 15 kbps high bit-rate mode */
+static const SpeexSubmode nb_submode5 = {
+   -1,
+   0,
+   3,
+   0,
+   /*LSP quantization*/
+   lsp_quant_nb,
+   lsp_unquant_nb,
+   /*Pitch quantization*/
+   pitch_search_3tap,
+   pitch_unquant_3tap,
+   &ltp_params_nb,
+   /*Innovation quantization*/
+   split_cb_search_shape_sign,
+   split_cb_shape_sign_unquant,
+   &split_cb_nb,
+   QCONST16(.3,15),
+   300
+};
+
 /* Default mode for narrowband */
 static const SpeexNBMode nb_mode = {
    160,    /*frameSize*/
@@ -114,7 +152,7 @@ static const SpeexNBMode nb_mode = {
    0.9, 0.6, /* gamma1, gamma2 */
 #endif
    QCONST16(.0002,15), /*lpc_floor*/
-   {NULL, NULL, NULL, &nb_submode3, NULL, NULL, NULL, NULL,
+   {NULL, NULL, NULL, &nb_submode3, NULL, &nb_submode5, NULL, NULL,
    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL},
    5,
    {1, 8, 2, 3, 3, 4, 4, 5, 5, 6, 7}

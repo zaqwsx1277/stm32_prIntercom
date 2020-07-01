@@ -235,5 +235,6 @@ typedef float spx_word32_t;
 extern long long spx_mips;
 #endif
 
+#define EXPORT
 
 #endif

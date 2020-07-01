@@ -126,13 +126,13 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
 	switch (stState) {
-	  case stateADC :
-		if (++stVoiceEncodeBufPos == defVoiceInputBufSize) {			// Если сработало прерывание, то значит нужно сменить позицию в буфере
-		  stVoiceEncodeBufPos = 0 ;
-		  stVoiceEncodeBufTransfer = stVoiceEncodeBufNum ;
-		  if (++stVoiceEncodeBufNum == defNumBuf) stVoiceEncodeBufNum = 0 ;
-	    }
-		stState = stateReady ;
+	  case stateReady :
+		  if (++stVoiceEncodeBufPos == defVoiceInputBufSize) {			// Если сработало прерывание, то значит нужно сменить позицию в буфере
+		    stVoiceEncodeBufPos = 0 ;
+		    stVoiceEncodeBufTransfer = stVoiceEncodeBufNum ;
+		    if (++stVoiceEncodeBufNum == defNumBuf) stVoiceEncodeBufNum = 0 ;
+	      }
+//		stState = stateReady ;
 	  break ;
 
 	  default :
@@ -172,10 +172,38 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 }
 //-------------------------------------------------------------------------------------------
 /*!
+ * В зависимости от состояния управляем светодиодами
+ */
+void setState (trState inState)
+{
+	stState = inState ;
+	switch (stState) {
+	  case stateWait :
+		HAL_GPIO_WritePin (GPIOA, defColorLight1, GPIO_PIN_RESET) ;	// Выключаем светодиоды
+		HAL_GPIO_WritePin (GPIOA, defColorLight2, GPIO_PIN_RESET) ;
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_RESET) ;		// Включаем контроллер на приём
+	  break ;
+
+	  case stateReady :
+		HAL_GPIO_WritePin (GPIOA, defColorLight1, GPIO_PIN_SET) ;
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET) ;		// Включаем контроллер на приём
+	  break ;
+
+	  case stateVoiceReceive : {
+		HAL_GPIO_WritePin (GPIOA, defColorLight2, GPIO_PIN_SET) ;
+	  break ;
+
+	  default :
+	  break ;
+	}
+}
+//-------------------------------------------------------------------------------------------
+/*!
  *	Менеджер обработки состояний
  */
 void managerState  ()
 {
+stTemp++ ;
 
 	switch (stState) {
 	  case stateStart :
@@ -184,15 +212,12 @@ void managerState  ()
 	  break ;
 
 	  case stateWait :
-		  HAL_GPIO_WritePin (GPIOA, defColorLight1, GPIO_PIN_RESET) ;	// Выключаем светодиоды
-		  HAL_GPIO_WritePin (GPIOA, defColorLight2, GPIO_PIN_RESET) ;
-		  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_RESET) ;		// Включаем контроллер на приём
+
 	  break ;
 
 	  case stateReady : {
-		HAL_GPIO_WritePin (GPIOA, defColorLight1, GPIO_PIN_SET) ;
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET) ;
-		stState = stateADC ;											// Получаем данные с микрофона через DMA
+
+//		stState = stateADC ;											// Получаем данные с микрофона через DMA
         HAL_ADC_Start_DMA (&hadc1, (uint32_t*) &stVoiceEncodeBuf [stVoiceEncodeBufNum][stVoiceEncodeBufPos], 1);
 	  }
 	  break ;
@@ -226,9 +251,13 @@ void managerTransfer ()
 	  break ;
 
 	  case stateReady :
+stTemp2 = stTemp ;
+
+		stState = stateSpeexCompress ;
 		speex_bits_reset(&stSpeexEncodeStream) ;	// Обрабатываем кодеком входной буфер
 		speex_encode_int(stSpeexEncodeHandle, (spx_int16_t*)stVoiceEncodeBuf [stVoiceEncodeBufTransfer], &stSpeexEncodeStream);
 		speex_bits_write(&stSpeexEncodeStream, (char *) stSpeexEncodeBuf, defVoiceEncodeBufSize);
+		if (stState == stateSpeexCompress) stState = stateReady ;
 
 //		HAL_UART_Transmit(&huart3, (uint8_t *)stSpeexEncodeBuf, defVoiceEncodeBufSize, defTimeoutTransmit) ;	// Сжатые данные передаём на второй контроллер
 	  break ;

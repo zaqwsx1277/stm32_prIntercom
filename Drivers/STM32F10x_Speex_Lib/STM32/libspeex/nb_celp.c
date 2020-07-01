@@ -413,7 +413,7 @@ int nb_encode(void *state, void *vin, SpeexBits *bits)
 
 
    /*Quantize LSPs*/
-   SUBMODE(lsp_quant)(lsp, qlsp, st->lpcSize, bits);
+   SUBMODE(lsp_quant)(lsp, qlsp, st->lpcSize, bits);  
    
    /*Quantize and transmit open-loop excitation gain*/
    {
