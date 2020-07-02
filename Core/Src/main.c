@@ -24,7 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
-#include "TComDef.h"
+#include "speex/speex.h"
 
 /* USER CODE END Includes */
 
@@ -57,7 +57,18 @@ UART_HandleTypeDef huart3;
 DMA_HandleTypeDef hdma_usart3_rx;
 
 /* USER CODE BEGIN PV */
+static uint16_t stBuf [160] = {754, 755, 774, 771, 775, 772, 780, 764, 804, 760, 784, 766, 768, 782, 751, 784, 765, 778, 767, 753, 767, 754, 788, 766, 756, 765, 785, 780, 791, 760, 749, 753, 784, 797, 825, 795, 761, 778, 778, 783, 785, 783, 799, 766, 789, 747, 773, 795, 790, 799, 772, 772, 746, 795, 777, 773, 756, 782, 749, 773, 752, 780, 758, 802, 791, 780, 784, 807, 778, 763, 759, 776, 794, 792, 760, 787, 770, 772, 768, 793, 751, 783, 770, 799, 758, 802, 782, 782, 750, 770, 779, 768, 775, 758, 772, 737, 764, 757, 762, 816, 790, 776, 762, 791, 785, 803, 783, 793, 758, 758, 766, 785, 778, 775, 794, 762, 813, 762, 787, 754, 815, 761, 774, 767, 823, 789, 774, 802, 770, 753, 759, 781, 763, 790, 767, 772, 762, 759, 781, 789, 761, 777, 782, 771, 778, 758, 794, 790, 767, 793, 798, 789, 761, 772, 782, 773, 794, 795, 782, 768} ;
+static uint16_t stEncode [20] ;
+static uint32_t stIndex = 0 ;
+static uint32_t stTmp = 0 ;
+static uint32_t stTmp2 = 0 ;
 
+static void *stSpeexEncodeHandle ;			///< Указатель на структуру описывающую состояние кодека
+static SpeexBits stSpeexEncodeStream ;
+
+volatile static int32_t stSpeexQuality = 4 ;						///< Качество. От него зависит используемый битрейт. 0 - загрузка минимальная, 10 максимальная.
+volatile static int32_t stSpeexComplexity = 0 ;						///< Установка загрузки процессора
+volatile static int32_t stSpeexVBR = 0 ;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -81,10 +92,18 @@ static void MX_USART3_UART_Init(void);
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-	if (htim -> Instance == TIM2) managerState () ;			// С частотой 8 кГц обрабатываем состояния контроллера
-	if (htim -> Instance == TIM6)
-		stState = stateWait ;		// Если сработал этот таймер, то значит передача звука со второго контроллера прекращена
-	if (htim -> Instance == TIM3) managerTransfer () ;		// По срабатыванию этого таймера выполняется сжатие и передача буфера
+
+	if (htim -> Instance == TIM2)
+		stIndex++ ;
+	if (htim -> Instance == TIM3) {
+		stTmp = stIndex ;
+		speex_bits_reset(&stSpeexEncodeStream) ;	// Обрабатываем кодеком входной буфер
+		speex_encode_int(stSpeexEncodeHandle, (spx_int16_t*)stBuf, &stSpeexEncodeStream);
+		speex_bits_write(&stSpeexEncodeStream, (char *) stEncode, 20);
+		stTmp2 = stIndex ;
+		int i = 0 ;
+		int x = i ;
+	}
 }
 //-------------------------------------------------------------------------------------------
 /*!
@@ -92,16 +111,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-	switch (stState) {
-	  case stateWait :		// Реакция на кнопки возможна только в режиме ожидания и передачи голоса
-	  case stateReady :
-		if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) stState = stateReady ;
-		  else stState = stateWait ;
-	  break ;
 
-	  default :
-	  break ;
-	}
 }
 //-------------------------------------------------------------------------------------------
 /*!
@@ -127,20 +137,6 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac)
  */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	switch (stState) {
-	  case stateVoicePlay:
-		  htim6.Instance -> CNT = 0 ;								// по новой начинаем отсчёт ожидания прекращения получения звука
-		  stState = stateVoiceReceive ;
-	  break;
-
-	  case stateWait:
-		HAL_TIM_Base_Start_IT (&htim6) ;							// Запускаем таймер для контроля перекращения получения звука
-		stState = stateVoiceReceive ;
-	  break;
-
-	  default:
-	  break;
-	}
 
 
 }
@@ -150,46 +146,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
  */
 void managerState  ()
 {
-	switch (stState) {
-	  case stateStart :
-		if (stStartPeriod-- == 0) stState = stateWait ;
-							// Сюда я хотел присать какие-то действия при запуске.
-	  break ;
-
-	  case stateWait :
-		  HAL_GPIO_WritePin (GPIOA, defColorLight1, GPIO_PIN_RESET) ;	// Выключаем светодиоды
-		  HAL_GPIO_WritePin (GPIOA, defColorLight2, GPIO_PIN_RESET) ;
-	  break ;
-
-	  case stateReady : {
-		HAL_GPIO_WritePin (GPIOA, defColorLight1, GPIO_PIN_SET) ;
-        HAL_ADC_Start(&hadc1); 											// Получаем данные с микрофона через DMA
-        HAL_ADC_PollForConversion(&hadc1, 100);
-        stVoiceIn = HAL_ADC_GetValue(&hadc1);
-        HAL_ADC_Stop(&hadc1);
-
-		uint16_t voiceIn = stVoiceIn ;
-        HAL_GPIO_WritePin (GPIOC, GPIO_PIN_12, GPIO_PIN_SET) ;			// Передаем данные на второй контроллер
-		HAL_UART_Transmit(&huart3, (uint8_t *) &voiceIn, 2, 100) ;
-		HAL_GPIO_WritePin (GPIOC, GPIO_PIN_12, GPIO_PIN_RESET) ;
-	  }
-	  break ;
-
-	  case stateVoiceReceive : {
-		HAL_GPIO_WritePin (GPIOA, defColorLight2, GPIO_PIN_SET) ;
-		HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t *) &stVoiceOut, 1, DAC_ALIGN_12B_R) ; // Воспроизводим через динамик декодированные данные
-		startUART_DMA ;
-		stState = stateVoicePlay ;
-	  }
-	  break ;
-
-	  case stateVoicePlay :
-
-	  break ;
-
-	  default :
-	  break ;
-	}
 
 }
 //----------------------------------------------------------------------------------
@@ -240,11 +196,17 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  HAL_TIM_Base_Start_IT(&htim2);
-  HAL_TIM_Base_Start_IT(&htim3);
+	speex_bits_init(&stSpeexEncodeStream);
+	stSpeexEncodeHandle = speex_encoder_init(&speex_nb_mode);
+	speex_encoder_ctl(stSpeexEncodeHandle, SPEEX_SET_VBR, &stSpeexVBR);
+	speex_encoder_ctl(stSpeexEncodeHandle, SPEEX_SET_QUALITY,&stSpeexQuality);
+	speex_encoder_ctl(stSpeexEncodeHandle, SPEEX_SET_COMPLEXITY, &stSpeexComplexity);
 
-  HAL_ADCEx_Calibration_Start(&hadc1);
-  startUART_DMA ;
+	  HAL_TIM_Base_Start_IT(&htim2);
+	  HAL_TIM_Base_Start_IT(&htim3);
+
+ // HAL_ADCEx_Calibration_Start(&hadc1);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
