@@ -29,14 +29,14 @@
 #define defColorLight2 GPIO_PIN_1
 #endif
 
-#define startUART_DMA HAL_UART_Receive_DMA(&huart3, (uint8_t *) &stVoiceOut, 2) ///< Макрос для инициализации приёма данных по DMA
+#define startUART_DMA HAL_UART_Receive_DMA(&huart3, (uint8_t *) stSpeexDecodeBuf , defVoiceEncodeBufSize) ///< Макрос для инициализации приёма данных по DMA
 
 
 
 	typedef enum protocol {trAsk, trConfirm, trReject,trSendData, trReceiveData, trFinish} defProtocol ; ///< Протокол взаимодействия контроллеров.
 
 	typedef enum protocolErr {errNo, errUnknown} defProtocolErr ;
-	enum trState {stateUnknown,
+	typedef enum state {stateUnknown,
 				  stateWait, 			// Ожидание передачи или приёма
 				  stateFirstTim3,		// Первое прерывание таймера TIM3
 				  stateStart, 			// Начальный период
@@ -47,7 +47,7 @@
 				  stateVoiceReceive,	// Получен получен звук от второго контроллера
 				  stateADC,				// Выполняется оцифровка голоса через DMA
 				  stateSpeexCompress, 	// Выполняется сжатие буфера кодеком speex. Данное состояние нужно, что бы не потерять весь буфер данных целиком
-				  stateError} ;
+				  stateError} defState ;
 
 //	struct defProtocol {
 //		defProtocol command;
@@ -77,7 +77,7 @@
 	volatile static int32_t stSpeexQuality = 3 ;						///< Качество. От него зависит используемый битрейт. 0 - загрузка минимальная, 10 максимальная.
 	volatile static int32_t stSpeexComplexity = 0 ;						///< Установка загрузки процессора
 	volatile static int32_t stSpeexVBR = 0 ;							///< Флаг установки переменного битрейта 0- выключен
-//	volatile static int32_t stSpeexEnh = 1 ;							///< Флаг регулировки усиления
+	volatile static int32_t stSpeexEnh = 1 ;							///< Флаг регулировки усиления
 
 //	static uint32_t stTestClock = {0} ;
 //	static uint64_t stTestVal = 1 ;
@@ -86,13 +86,13 @@
 
 //	volatile static uint32_t stPeriodVoiceReceive = 0 ;					///< Счётчик ожидания окончания передачи голоса
 
-	void setState (trState) ;											///< В зависимости от состояния управляем светодиодами
+	void setState (defState) ;											///< В зависимости от состояния управляем светодиодами
 	void managerState () ;												///< Менеджер обработки состояний
 	void managerTransfer () ;											///< Менеджер сжатия кодеком и передачи данных
 	void *speexInit (SpeexBits*) ;										///< Инициализация кодека speex
 
-	static uint32_t stTemp = 0 ;
-	static uint32_t stTemp2 = 0 ;
-	static uint32_t stTemp3 = 0 ;
+	volatile static uint32_t stTemp = 0 ;
+	volatile static uint32_t stTemp2 = 0 ;
+//	static uint32_t stTemp3 = 0 ;
 
 #endif /* INC_TCOMDEF_HPP_ */
