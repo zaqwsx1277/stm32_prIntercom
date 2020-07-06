@@ -45,8 +45,10 @@
 				  stateTrSend,
 				  stateVoicePlay, 		// Воспроизведения звука
 				  stateVoiceReceive,	// Получен получен звук от второго контроллера
+				  stateVoiceWait, 		// Ожидание получения данных со второго контроллера. Нужно что бы буфер не воспроизводился повторно.
 				  stateADC,				// Выполняется оцифровка голоса через DMA
 				  stateSpeexCompress, 	// Выполняется сжатие буфера кодеком speex. Данное состояние нужно, что бы не потерять весь буфер данных целиком
+
 				  stateError} defState ;
 
 //	struct defProtocol {
@@ -65,9 +67,10 @@
 	volatile static uint16_t stVoiceEncodeBufPos = 0 ;					///< Текущая позиция в буфере stVoiceEncodeBuf
 	volatile static uint16_t stVoiceEncodeBufNum = 0 ;					///< Индекс заполняемого буфера для исходных данных
 	volatile static uint16_t stVoiceEncodeBufTransfer = 0 ;				///< Индекс обрабатываемого буфера для исходных данных
-//	volatile static uint32_t stVoiceEncodeErr = 0 ;						///< Кол-во ошибок заполнения входного буфера
+	volatile static uint32_t stVoiceEncodeErr = 0 ;						///< Кол-во ошибок заполнения входного буфера. Зачем это нужно я не знаю
 	volatile static uint16_t stVoiceDecodeBufPos = 0 ;					///< Текущая позиция в буфере stVoiceDecodeBuf
 	volatile static uint16_t stVoiceDecodeBufNum = 0 ;					///< Текущий обрабатываемый буфер для декодированных данных
+	volatile static uint16_t stVoiceDecodeBufPlay = 0 ;					///< Текущий буфер для воспоизведения звука
 //	volatile static uint32_t stVoiceDecodeErr = 0 ;						///< Кол-во ошибок воспроизведения декодированных данных
 //	volatile static uint16_t stVoiceEncodeAverage = 2000 ;				///< Среднее значение оцифрованного шума. Нужно для корректной работы декодирования speex
 

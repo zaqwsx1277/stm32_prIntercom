@@ -82,8 +82,7 @@ static void MX_USART3_UART_Init(void);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if (htim -> Instance == TIM2) managerState () ;			// С частотой 8 кГц обрабатываем состояния контроллера
-	if (htim -> Instance == TIM3)
-		managerTransfer () ;		// По срабатыванию этого таймера выполняется сжатие и передача буфера
+	if (htim -> Instance == TIM3) managerTransfer () ;		// По срабатыванию этого таймера выполняется сжатие и передача буфера
 	if (htim -> Instance == TIM6) {							// Если сработал этот таймер, то значит передача звука со второго контроллера прекращена
 		setState (stateWait) ;
 		stVoiceDecodeBufPos = 0 ;
@@ -103,6 +102,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	  case stateReady :
 	  case stateADC :
 	  case stateFirstTim3 :
+	  case stateSpeexCompress :
 		if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {
 			setState (stateFirstTim3) ;						// Переводим в режим оцифровки с микрофона, пропуская первое срабатывание таймера TIM3
 			stVoiceEncodeBufPos = 0 ;
@@ -122,17 +122,24 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 //-------------------------------------------------------------------------------------------
 /*!
  *	Обработка прерываний по DMA от аналогового микрофона
- *			!!! Абсолютно не проверяется производительность контроллера. Т.е. успел кодек обработать буфер или нет.
+ *		!!! При недостаточной производительности контроллера, увеличивается кол-во ошибок. Зачем это нужно я не знаю.
  */
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-	switch (stState) {
+	switch (stState) {				// Если сработало прерывание, то значит нужно сменить позицию в буфере
 	  case stateReady :
-		  if (++stVoiceEncodeBufPos == defVoiceInputBufSize) {			// Если сработало прерывание, то значит нужно сменить позицию в буфере
+		if (++stVoiceEncodeBufPos == defVoiceInputBufSize) {
 		    stVoiceEncodeBufPos = 0 ;
 		    stVoiceEncodeBufTransfer = stVoiceEncodeBufNum ;
 		    if (++stVoiceEncodeBufNum == defNumBuf) stVoiceEncodeBufNum = 0 ;
-	      }
+	    }
+	  break ;
+
+	  case stateSpeexCompress :	// Если сжатие кодеком еще не закончилось а буфер уже заполнен, то просто теряем оцифровку звука пока оно не закончится
+		if (++stVoiceEncodeBufPos == defVoiceInputBufSize) {
+			stVoiceEncodeBufPos = defVoiceInputBufSize - 1 ;
+			stVoiceEncodeErr++ ;
+		}
 	  break ;
 
 	  default :
@@ -145,7 +152,11 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
  */
 void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac)
 {
-
+	if (++stVoiceDecodeBufPos == defVoiceInputBufSize) {
+		stVoiceDecodeBufPos = 0 ;
+		if (++stVoiceDecodeBufPlay == defNumBuf)stVoiceDecodeBufPlay = 0 ;
+		if (stVoiceDecodeBufPlay == stVoiceDecodeBufNum) setState(stateVoiceWait) ; // Если новых данных не получено, то переходим в режим ожидания получения данных
+	}
 }
 //-------------------------------------------------------------------------------------------
 /*!
@@ -155,12 +166,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	switch (stState) {
 	  case stateVoicePlay:
-		  htim6.Instance -> CNT = 0 ;								// по новой начинаем отсчёт ожидания прекращения получения звука
-		  setState (stateVoiceReceive) ;
+	  case stateVoiceWait :
+		htim6.Instance -> CNT = 0 ;									// По новой начинаем отсчёт ожидания прекращения получения звука
+		setState (stateVoiceReceive) ;
 	  break;
 
 	  case stateWait:
-		HAL_TIM_Base_Start_IT (&htim6) ;							// Запускаем таймер для контроля перекращения получения звука
+		HAL_TIM_Base_Start_IT (&htim6) ;							// Запускаем таймер для контроля перекращения получения звука.
 		setState (stateVoiceReceive) ;
 	  break;
 
@@ -187,7 +199,7 @@ void setState (defState inState)
 	  case stateSpeexCompress :
 		HAL_GPIO_WritePin (GPIOA, defColorLight1, GPIO_PIN_SET) ;
 		HAL_GPIO_WritePin (GPIOA, defColorLight2, GPIO_PIN_RESET) ;
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET) ;		// Включаем контроллер на приём
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET) ;		// Включаем контроллер на передачу
 	  break ;
 
 	  case stateVoiceReceive :
@@ -214,19 +226,23 @@ stTemp++ ;
 	  break ;
 
 	  case stateReady :
+	  case stateSpeexCompress :
         HAL_ADC_Start_DMA (&hadc1, (uint32_t*) &stVoiceEncodeBuf [stVoiceEncodeBufNum][stVoiceEncodeBufPos], 1);
 	  break ;
 
-	  case stateVoiceReceive : {	// Получен очередной блок
-
-//		HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t *) &stVoiceOut, 1, DAC_ALIGN_12B_R) ; // Воспроизводим через динамик декодированные данные
+	  case stateVoiceReceive : {	// Получен очередной блок.
+		speex_bits_read_from(&stSpeexDecodeStream, (char *) stSpeexDecodeBuf, defVoiceEncodeBufSize) ;
+		speex_decode_int(stSpeexDecodeHandle, &stSpeexDecodeStream, (spx_int16_t *) stVoiceDecodeBuf [stVoiceDecodeBufNum]) ;
+		if (++stVoiceDecodeBufNum == defNumBuf) stVoiceDecodeBufNum = 0 ;
 		startUART_DMA ;
 		setState (stateVoicePlay) ;
 	  }
 	  break ;
 
-	  case stateVoicePlay :
-
+	  case stateVoicePlay :	{		// Воспроизводим через динамик декодированные данные
+		  uint32_t voice = stVoiceDecodeBuf [stVoiceDecodeBufPlay][stVoiceDecodeBufPos] + 700 ;
+		  HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t *) &voice, 1, DAC_ALIGN_12B_R) ;
+	  }
 	  break ;
 
 	  default :
@@ -242,7 +258,7 @@ void managerTransfer ()
 {
 	switch (stState) {
 	  case stateFirstTim3 :		// Пропускаем первое срабатывание таймера TIM3
-		stState = stateReady ;
+		setState (stateReady) ;
 	  break ;
 
 	  case stateReady :
